@@ -16,17 +16,20 @@ testing <- read.csv("pml-testing.csv")
 names(training)
 ```
 
-As checked from the table above, the first columns are about names and time, which should not be considered as predictors in the final model if we want to ensure the robustness. And the columns with too many "NAs" shall be cleaned as well.
+As checked from the table above, the first columns are about name, window and time, which should not be considered as predictors in the final model if we want to ensure the robustness. And the columns with too many "NAs" (>90%) shall be cleaned as well.
 
 ```{r}
 ##define a function to clean the data.
 trim <- function(data){
-  for(i in 159:1){
-    if(mean(is.numeric(data[,i]))!=1|mean(is.na(data[,i]))!=0){
-      data <- data[,-i]
-    }
-  }
-  data
+    for(i in 7:1){
+        data <- data[,-i]
+        }
+    for(i in 152:1){
+        if(mean(is.numeric(data[,i]))!=1|mean(is.na(data[,i]))>0.9){
+            data <- data[,-i]
+            }
+        }
+    data
 }
 ##trim training and testing data.
 training <- trim(training)
@@ -42,39 +45,38 @@ folds <- createFolds(training$classe,k=3,list=TRUE,returnTrain=TRUE)
 Since the goal is to divide the samples into 5 levels, we first tested on "prediction tree".
 
 ```{r}
-##try decision tree with 20 principal components.
+##decision tree
+error <- vector()
 for(i in 1:3){
   trainSet <- training[folds[[i]],]
   testSet <- training[-folds[[i]],]
-  preProc <- preProcess(trainSet[,-57],method="pca",pcaComp=20)
-  trainPC <- predict(preProc,trainSet[,-57])
-  modFit <- train(trainSet$classe~.,method="rpart",data=trainPC)
-  testPC <- predict(preProc,testSet[,-57])
-  print(confusionMatrix(testSet$classe,predict(modFit,testPC)))
+  modFit <- train(trainSet$classe~.,method="rpart",data=trainSet)
+  conMatrix <- confusionMatrix(testSet$classe,predict(modFit,testSet))
+  print(conMatrix)
+  error[i] <- 1-as.numeric(conMatrix$overall[1])
 }
+paste("the expected error for this model is",mean(error),sep=" ")
 ```
 
 And then "random forests".
 
 ```{r}
+##random forests
 for(i in 1:3){
   trainSet <- training[folds[[i]],]
   testSet <- training[-folds[[i]],]
-  preProc <- preProcess(trainSet[,-57],method="pca",pcaComp=20)
-  trainPC <- predict(preProc,trainSet[,-57])
-  modFit <- train(trainSet$classe~.,method="rf",data=trainPC)
-  testPC <- predict(preProc,testSet[,-57])
-  print(confusionMatrix(testSet$classe,predict(modFit,testPC)))
+  modFit <- train(trainSet$classe~.,method="rf",data=trainSet)
+  conMatrix <- confusionMatrix(testSet$classe,predict(modFit,testSet))
+  print(conMatrix)
+  error[i] <- 1-as.numeric(conMatrix$overall[1])
 }
+paste("the expected error for this model is",mean(error),sep=" ")
 ```
 
-Since the average accuracy of "random forests" is above 95%. I would expect the out of sample error to be less than 5%.
+Since the average accuracy of "random forests" is higher than "decision tree", so we decided to use the former. And the expected out of sample error is calculated above.
 
 ```{r}
 ##prediction of the testing data.
-preProc <- preProcess(training[,-57],method="pca",pcaComp=20)
-trainPC <- predict(preProc,training[,-57])
-modFit <- train(training$classe~.,method="rf",data=trainPC)
-testPC <- predict(preProc,testing[,-57])
-predict(modFit,testPC)
+modFit <- train(training$classe~.,method="rf",data=training)
+predict(modFit,testing)
 ```
